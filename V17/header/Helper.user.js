@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.64
+// @name         TMN TDS Auto v17.66
 // @namespace    http://tampermonkey.net/
-// @version      17.64
-// @description  v17.64 — DTM invite mail cleanup now deletes every DTM invitation in the inbox, not just the accepted one
+// @version      17.66
+// @description  v17.66 — OC item auto-buy: each step (go to store, buy, return) now waits a random 3-10s
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*
@@ -22,6 +22,59 @@
 // ==/UserScript==
 
 /*
+TMN TDS Auto v17.66 — changelog
+
+CHANGED IN v17.66:
+- OC item auto-buy (v17.65) now waits a random 3-10 seconds before each of
+  its three steps: going to the underground store, clicking Buy, and
+  returning to the OC page. The delay is the script's usual human-style
+  randomDelay(), clamped so it can never fall outside 3-10s (the shared
+  helper adds a little jitter that can drift slightly past its range).
+  Navigation for these steps now goes through a small helper that checks for
+  jail and then sets window.location directly, instead of safeNavigate(),
+  which would have added its own extra 1.1-1.9s and broken the 3-10s window.
+  The countdown shows on the panel status line like the other OC/DTM waits.
+- The "re-issue navigation if nothing happened" safety timer was lengthened
+  from 10s to 20s so a slow (up to 10s) delay can't be mistaken for a stall
+  and scheduled twice.
+- Not changed: the existing Choose click on the OC page after you return
+  still uses the general OC/DTM action delay (3-20s, DELAYS.ocDtmAction),
+  since that is shared with normal OC role selection.
+
+--- v17.65 changelog below ---
+
+TMN TDS Auto v17.65 — changelog
+
+NEW IN v17.65:
+- Auto-buy the OC role item. After accepting an OC invite as Weapon Master
+  or Explosive Expert, if the item dropdown on the OC page is empty (nothing
+  in inventory), the script buys one from the underground store - XM-29 OICW
+  (cat=weapon, itemid=24) for Weapon Master, C4 (cat=explosive, itemid=9) for
+  Explosive Expert - returns to the OC page, and the existing handler selects
+  it and clicks Choose as before.
+- New Settings switch "Auto-buy OC weapon/explosive" (OC Items section).
+  Default OFF because it spends in-game cash. With it off, behaviour is
+  exactly as before.
+- Detection: the empty weapons/explosives dropdown (an empty list or a single
+  blank option). If the dropdown id isn't one the script knows, it falls back
+  to the invited role (the pos= value on the accept link, now saved as
+  tmnPendingOCRole) plus any empty ctl00_main_* dropdown beside a Choose
+  button. Transporter (cars) is never touched.
+- Safety, learned from the 3x bunker bug: at most ONE purchase attempt per
+  invite (marker persisted before leaving the OC page); the "clicked" stage
+  is persisted before the Buy click; after clicking it never navigates away
+  until the page has actually reloaded (or 20s pass) so it can't cancel its
+  own request; if the list is still empty after the attempt (e.g. not
+  enough cash) it sends a Telegram message and leaves the invite instead of
+  retrying; the whole flow is abandoned after 3 minutes or if the switch is
+  turned off. The 2-minute pending-invite timeout becomes 4 minutes only for
+  invites where a purchase was attempted.
+- Uses the real Buy link on the store page when found, otherwise the same
+  URL directly. The underground store is recognised as store.aspx with p=w
+  or no p= (new page type 'ugstore').
+
+--- v17.64 changelog below ---
+
 TMN TDS Auto v17.64 — changelog
 
 CHANGED IN v17.64:
@@ -1419,7 +1472,7 @@ No changes intended to bypass site detection or restrictions; reliability/load c
         document.body.appendChild(loginOverlay);
       }
       console.log("[TMN AutoLogin]", message);
-      loginOverlay.textContent = `TMN TDS AutoLogin v17.64\n${message}`;
+      loginOverlay.textContent = `TMN TDS AutoLogin v17.66\n${message}`;
     }
 
     function clearTimers() {
@@ -1988,6 +2041,16 @@ if (currentPath.includes("/authenticated/")) {
     // becomes ready again) so the next eligible window can re-trigger.
     autoAddDTM: GM_getValue('autoAddDTM', false),
     dtmAddedThisCycle: GM_getValue('dtmAddedThisCycle', false),
+    // v17.65 - Auto-buy the OC role item (XM-29 OICW for Weapon Master, C4 for
+    // Explosive Expert) from the underground store when the item dropdown on
+    // the OC page is empty. ocItemBuyInvite remembers which invite we already
+    // tried for, so there is at most ONE purchase attempt per invite.
+    autoBuyOCItem: GM_getValue('autoBuyOCItem', false),
+    ocItemBuyInvite: GM_getValue('ocItemBuyInvite', ''),
+    ocItemBuyKind: GM_getValue('ocItemBuyKind', ''),
+    ocItemBuyStage: GM_getValue('ocItemBuyStage', ''),
+    ocItemBuyStageAt: GM_getValue('ocItemBuyStageAt', 0),
+    ocItemBuyStartedAt: GM_getValue('ocItemBuyStartedAt', 0),
     whitelistEnabled: GM_getValue('whitelistEnabled', false),
     whitelistNames: GM_getValue('whitelistNames', []),
     carCategories: GM_getValue('carCategories', {}),
@@ -2064,6 +2127,12 @@ if (currentPath.includes("/authenticated/")) {
     GM_setValue('ocAdsCheckInProgress', state.ocAdsCheckInProgress);
     GM_setValue('autoAddDTM', state.autoAddDTM);
     GM_setValue('dtmAddedThisCycle', state.dtmAddedThisCycle);
+    GM_setValue('autoBuyOCItem', state.autoBuyOCItem);
+    GM_setValue('ocItemBuyInvite', state.ocItemBuyInvite);
+    GM_setValue('ocItemBuyKind', state.ocItemBuyKind);
+    GM_setValue('ocItemBuyStage', state.ocItemBuyStage);
+    GM_setValue('ocItemBuyStageAt', state.ocItemBuyStageAt);
+    GM_setValue('ocItemBuyStartedAt', state.ocItemBuyStartedAt);
     GM_setValue('whitelistEnabled', state.whitelistEnabled);
     GM_setValue('whitelistNames', state.whitelistNames);
     GM_setValue('carCategories', state.carCategories);
@@ -2249,7 +2318,7 @@ if (currentPath.includes("/authenticated/")) {
         'autoCrime', 'autoGTA', 'autoJail', 'autoBooze', 'lastCrime', 'lastGTA', 'lastJail', 'lastBooze',
         'selectedCrimes', 'selectedGTAs', 'playerName', 'inJail', 'crimeCollapsed', 'gtaCollapsed',
         'boozeCollapsed', 'panelMinimized', 'lastJailCheck', 'currentAction', 'needsRefresh', 'pendingAction',
-        'autoOC', 'autoDTM', 'autoAddOC', 'ocReadyForAddAt', 'ocAddedThisCycle', 'ocAdsCheckInProgress', 'autoAddDTM', 'dtmAddedThisCycle',
+        'autoOC', 'autoDTM', 'autoAddOC', 'ocReadyForAddAt', 'ocAddedThisCycle', 'ocAdsCheckInProgress', 'autoAddDTM', 'dtmAddedThisCycle', 'autoBuyOCItem', 'ocItemBuyInvite', 'ocItemBuyKind', 'ocItemBuyStage', 'ocItemBuyStageAt', 'ocItemBuyStartedAt',
         'lastStaffScriptMailId', 'lastScriptTestMailId', 'lastNotifiedMailId', 'notifyStaffMailCheck', 'notifyInboxScriptTest',
         'autoBunker', 'lastBunkerCheck', 'bunkerCheckInProgress',
         'autoBunkerExtend', 'bunkerExtendPending', 'bunkerExpiresAt',
@@ -5014,6 +5083,217 @@ let logoutNotificationSent = false;
   }
 
   // ============================================================
+  // OC ITEM AUTO-BUY (v17.65)
+  // ============================================================
+  // When an OC invite's role needs a weapon (Weapon Master) or explosive
+  // (Explosive Expert) and the item dropdown on the OC page is EMPTY (nothing
+  // in inventory), buy one from the underground store, return to the OC page,
+  // and let handleOCPageAfterAccept pick it as usual.
+  //
+  // Safety rules, learned from the bunker double-buy bug:
+  //  - at most ONE purchase attempt per invite (ocItemBuyInvite is persisted
+  //    BEFORE leaving the OC page);
+  //  - the 'clicked' stage is persisted BEFORE the Buy click/navigation;
+  //  - after the click we never navigate away until the page has actually
+  //    reloaded (or 20s passed), so we can't cancel our own in-flight request.
+  const OC_ITEM_STORE_URL = '/authenticated/store.aspx?p=w';
+  const OC_ITEM_BUY = {
+    weapon:    { name: 'XM-29 OICW', cat: 'weapon',    itemId: 24 },
+    explosive: { name: 'C4',         cat: 'explosive', itemId: 9  }
+  };
+  const OC_ITEM_PAGE_LOAD_TS = Date.now(); // per page load: lets us tell "same page" from "reloaded after the click"
+
+  // v17.66 - every step of the purchase flow (go to store, click Buy, return to
+  // the OC page) waits a random 3-10s first. randomDelay() adds a little
+  // jitter that can push slightly outside its range, so clamp to keep it
+  // strictly within 3-10s. Navigation here uses window.location directly
+  // (after an explicit jail check) rather than safeNavigate(), which would
+  // stack its own extra 1.1-1.9s on top and break the 3-10s window.
+  const OC_BUY_DELAY_RANGE = [3000, 10000];
+  function ocBuyDelay() {
+    return Math.min(OC_BUY_DELAY_RANGE[1], Math.max(OC_BUY_DELAY_RANGE[0], randomDelay(OC_BUY_DELAY_RANGE)));
+  }
+  function scheduleOCBuyAction(label, fn) {
+    const delay = ocBuyDelay();
+    console.log(`[TMN][OC-BUY DELAY] ${label} in ${Math.round(delay / 1000)}s`);
+    updateStatus(`${label} in ${Math.round(delay / 1000)}s...`);
+    setTimeout(fn, delay);
+    return delay;
+  }
+  function ocBuyNavigate(url, label) {
+    scheduleOCBuyAction(label, () => {
+      if (state.inJail) { console.log('[TMN][OC-BUY] In jail - skipping navigation'); return; }
+      window.location.href = url;
+    });
+  }
+
+  function ocItemBuyUrl(spec) {
+    return `/authenticated/store.aspx?p=w&act=buy&cat=${spec.cat}&itemid=${spec.itemId}&r=`;
+  }
+
+  function findOCItemBuyLink(spec) {
+    const idRe = new RegExp('[?&]itemid=' + spec.itemId + '(&|$)');
+    return Array.from(document.querySelectorAll('a[href]')).find(a => {
+      const h = (a.getAttribute('href') || '').toLowerCase();
+      return h.includes('act=buy') && h.includes('cat=' + spec.cat) && idRe.test(h);
+    }) || null;
+  }
+
+  // Returns 'weapon' | 'explosive' when the role's item dropdown is empty, else null.
+  function detectMissingOCItem() {
+    const isEmpty = sel => !sel.options ||
+      Array.from(sel.options).every(o => !(o.value || '').trim() && !(o.textContent || '').trim());
+    const known = [
+      ['weapon',    ['ctl00_main_weaponslist', 'ctl00_main_weaponlist']],
+      ['explosive', ['ctl00_main_explosiveslist']]
+    ];
+    for (const [kind, ids] of known) {
+      for (const id of ids) {
+        const sel = document.getElementById(id);
+        if (sel && sel.tagName === 'SELECT' && isEmpty(sel)) return kind;
+      }
+    }
+    // Fallback when the dropdown id isn't one we know: use the role from the
+    // invite link (pos=) plus an empty ctl00_main_* dropdown that sits next
+    // to a Choose/Select button.
+    const role = (localStorage.getItem('tmnPendingOCRole') || '').toLowerCase();
+    const kind = role.includes('weapon') ? 'weapon' : (role.includes('explosive') ? 'explosive' : null);
+    if (!kind) return null;
+    const emptySel = Array.from(document.querySelectorAll('select')).find(sel =>
+      (sel.id || '').startsWith('ctl00_main_') && isEmpty(sel));
+    const chooseBtn = Array.from(document.querySelectorAll("input[type='submit'], button")).find(el =>
+      /choose|select/i.test((el.value || el.textContent || '') + ' ' + (el.id || '')));
+    return (emptySel && chooseBtn) ? kind : null;
+  }
+
+  function clearOCItemBuy() {
+    state.ocItemBuyStage = '';
+    state.ocItemBuyKind = '';
+    state.ocItemBuyStageAt = 0;
+    state.ocItemBuyStartedAt = 0;
+    saveState();
+  }
+
+  // Called from handleOCPageAfterAccept when an item is missing.
+  // Returns true if it took over this tick.
+  function startOCItemPurchase(kind, pendingTs) {
+    const spec = OC_ITEM_BUY[kind];
+    if (!spec) return false;
+    const inviteKey = String(pendingTs);
+
+    if (state.ocItemBuyInvite === inviteKey) {
+      // Already bought (or tried to) for this invite and the list is STILL empty.
+      console.warn(`[TMN][OC-BUY] ${spec.name} still missing after a purchase attempt - giving up on this invite`);
+      sendTelegramMessage(
+        '⚠️ <b>OC item still missing</b>\n\n' +
+        `Player: ${state.playerName || 'Unknown'}\n` +
+        `Tried to buy ${spec.name} but the item list is still empty (not enough cash?). Leaving this invite.`
+      );
+      localStorage.removeItem('tmnPendingOCHandle');
+      localStorage.removeItem('tmnPendingOCHandleTs');
+      state.isPerformingAction = false;
+      state.currentAction = '';
+      updateStatus(`❌ Could not get ${spec.name} - OC invite left`);
+      saveState();
+      return true;
+    }
+
+    // First time for this invite: persist the attempt marker BEFORE leaving the page.
+    const now = Date.now();
+    state.ocItemBuyInvite = inviteKey;
+    state.ocItemBuyKind = kind;
+    state.ocItemBuyStage = 'toStore';
+    state.ocItemBuyStageAt = now;
+    state.ocItemBuyStartedAt = now;
+    state.isPerformingAction = false;
+    state.currentAction = '';
+    saveState();
+    console.log(`[TMN][OC-BUY] No ${kind} in inventory - buying ${spec.name} from the underground store`);
+    updateStatus(`🛒 No ${kind} in inventory - buying ${spec.name}...`);
+    sendTelegramMessage(
+      '🛒 <b>Buying OC item</b>\n\n' +
+      `Player: ${state.playerName || 'Unknown'}\n` +
+      `No ${kind} in inventory - buying ${spec.name} from the underground store`
+    );
+    ocBuyNavigate(OC_ITEM_STORE_URL, 'Going to the underground store');
+    return true;
+  }
+
+  // Drives the store/return steps. Called from mainLoop BEFORE
+  // handleOCPageAfterAccept. Returns true if it claimed the tick.
+  function handleOCItemPurchase() {
+    const stage = state.ocItemBuyStage;
+    if (!stage) return false;
+    const now = Date.now();
+    const spec = OC_ITEM_BUY[state.ocItemBuyKind];
+
+    if (!state.autoBuyOCItem || !spec || now - state.ocItemBuyStartedAt > 180000) {
+      console.warn('[TMN][OC-BUY] Abandoning purchase flow (toggle off, unknown item, or timed out)');
+      clearOCItemBuy();
+      return false;
+    }
+    if (state.inJail) return false;
+
+    const page = getCurrentPage();
+    const onOCPage = window.location.pathname.toLowerCase().includes('organizedcrime.aspx');
+
+    if (stage === 'toStore') {
+      if (page !== 'ugstore') {
+        // Still on the OC page (or elsewhere) - only re-issue navigation if it's been a while
+        if (now - state.ocItemBuyStageAt > 20000) {
+          state.ocItemBuyStageAt = now;
+          saveState();
+          ocBuyNavigate(OC_ITEM_STORE_URL, 'Going to the underground store');
+        }
+        return true;
+      }
+      const link = findOCItemBuyLink(spec);
+      state.ocItemBuyStage = 'clicking';
+      state.ocItemBuyStageAt = now;
+      saveState();
+      scheduleOCBuyAction(`Buying ${spec.name}`, () => {
+        // Persist 'clicked' BEFORE the click so a fast reload can't lose it
+        state.ocItemBuyStage = 'clicked';
+        state.ocItemBuyStageAt = Date.now();
+        saveState();
+        if (link && document.contains(link)) link.click();
+        else window.location.href = ocItemBuyUrl(spec);
+      });
+      return true;
+    }
+
+    if (stage === 'clicking') {
+      // The delayed click is pending. If it never ran (page reloaded first), start over after 30s.
+      if (now - state.ocItemBuyStageAt > 30000) {
+        state.ocItemBuyStage = 'toStore';
+        state.ocItemBuyStageAt = now;
+        saveState();
+      }
+      return true;
+    }
+
+    if (stage === 'clicked') {
+      if (onOCPage) {
+        // Back on the OC page: purchase flow is finished; the normal handler takes over
+        console.log('[TMN][OC-BUY] Back on OC page after purchase');
+        clearOCItemBuy();
+        return false;
+      }
+      // Don't leave until the click's own page load has happened (or 20s passed)
+      const reloadedAfterClick = OC_ITEM_PAGE_LOAD_TS > state.ocItemBuyStageAt;
+      if (!reloadedAfterClick && now - state.ocItemBuyStageAt < 20000) return true;
+      if (now - state.ocItemBuyStageAt > 8000 || reloadedAfterClick) {
+        state.ocItemBuyStageAt = now;
+        saveState();
+        ocBuyNavigate('/authenticated/organizedcrime.aspx?' + Date.now(), `Bought ${spec.name} (request sent) - returning to OC page`);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  // ============================================================
   // OC PAGE HANDLER - Weapon/Explosive/Car selection after accepting
   // ============================================================
   function handleOCPageAfterAccept() {
@@ -5022,7 +5302,9 @@ let logoutNotificationSent = false;
 
     // Timeout: if pending for more than 2 minutes, clear it (something went wrong)
     const pendingTs = parseInt(localStorage.getItem('tmnPendingOCHandleTs') || '0', 10);
-    if (pendingTs > 0 && Date.now() - pendingTs > 120000) {
+    // v17.65 - allow 4 minutes instead of 2 when we had to go buy the item
+    const ocPendingMaxAge = (state.ocItemBuyInvite === String(pendingTs)) ? 240000 : 120000;
+    if (pendingTs > 0 && Date.now() - pendingTs > ocPendingMaxAge) {
       console.log('[TMN][AUTO-OC] Pending OC handle timed out after 2 min — clearing');
       localStorage.removeItem('tmnPendingOCHandle');
       localStorage.removeItem('tmnPendingOCHandleTs');
@@ -5083,6 +5365,12 @@ let logoutNotificationSent = false;
         try { sel.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
         console.log(`[TMN][AUTO-OC] Selected item from dropdown: ${sid}`);
       }
+    }
+
+    // v17.65 - empty item dropdown = no weapon/explosive in inventory: buy one
+    if (state.autoBuyOCItem && !acceptLink) {
+      const missingKind = detectMissingOCItem();
+      if (missingKind && startOCItemPurchase(missingKind, pendingTs)) return true;
     }
 
     // 3) Click the Choose/Select button
@@ -5764,6 +6052,8 @@ let logoutNotificationSent = false;
     if (path.includes('travel.aspx')) return 'travel';
     if (path.includes('store.aspx') && search.includes('p=b')) return 'store';
     if (path.includes('store.aspx') && search.includes('p=s')) return 'scrapyard';
+    // v17.65 - underground store (weapons/explosives): store.aspx with p=w or no p= at all
+    if (path.includes('store.aspx') && (search.includes('p=w') || !/[?&]p=/.test(search))) return 'ugstore';
     if (path.includes('ocads.aspx')) return 'ocads';
     if (path.includes('mailbox.aspx')) return 'mailbox';
     return 'other';
@@ -8644,7 +8934,7 @@ let logoutNotificationSent = false;
     wrapper.innerHTML = `
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center" id="tmn-drag-handle" style="cursor: grab;">
-          <strong>TMN TDS Auto v17.64</strong>
+          <strong>TMN TDS Auto v17.66</strong>
           <div>
             <button id="tmn-lock-btn" class="btn btn-sm btn-outline-secondary me-1" title="Lock/Unlock position">ð</button>
             <button id="tmn-settings-btn" class="btn btn-sm btn-outline-secondary me-1" title="Settings">
@@ -8850,6 +9140,14 @@ let logoutNotificationSent = false;
               <div class="form-check form-switch mb-3">
                 <input class="form-check-input" type="checkbox" id="tmn-auto-add-dtm">
                 <label class="form-check-label" for="tmn-auto-add-dtm" title="Adds you to the DTM Classifieds page whenever DTM is available and OC is NOT - OC always takes priority, so this never fires while OC is also ready.">📋 Auto-Add DTM Classifieds</label>
+              </div>
+
+              <hr style="border-color:#1f2937">
+
+              <h6 style="color:#cbd5e1;">OC Items</h6>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="tmn-auto-buy-oc-item">
+                <label class="form-check-label" for="tmn-auto-buy-oc-item" title="If you accept an OC invite as Weapon Master or Explosive Expert and the item dropdown is empty, buys an XM-29 OICW (weapon) or C4 (explosive) from the underground store, one attempt per invite.">🛒 Auto-buy OC weapon/explosive</label>
               </div>
 
               <hr style="border-color:#1f2937">
@@ -9281,6 +9579,7 @@ let logoutNotificationSent = false;
     shadowRoot.querySelector("#tmn-notify-ocdtm-ready").checked = state.notifyOCDTMReady;
     shadowRoot.querySelector("#tmn-auto-add-oc").checked = state.autoAddOC;
     shadowRoot.querySelector("#tmn-auto-add-dtm").checked = state.autoAddDTM;
+    shadowRoot.querySelector("#tmn-auto-buy-oc-item").checked = state.autoBuyOCItem;
 
     // Initialize ALL ON/OFF toggle
     const allToggle = shadowRoot.querySelector("#tmn-auto-all");
@@ -9622,6 +9921,12 @@ let logoutNotificationSent = false;
       state.dtmAddedThisCycle = false;
       saveState();
       updateStatus('📋 Auto-Add DTM Classifieds ' + (state.autoAddDTM ? 'Enabled' : 'Disabled'));
+    });
+
+    shadowRoot.querySelector("#tmn-auto-buy-oc-item").addEventListener('change', e => {
+      state.autoBuyOCItem = e.target.checked;
+      saveState();
+      updateStatus('🛒 Auto-buy OC weapon/explosive ' + (state.autoBuyOCItem ? 'Enabled' : 'Disabled'));
     });
 
     // Whitelist toggle and modal
@@ -10563,6 +10868,10 @@ async function mainLoop() {
     checkJailStateOnAnyPage();
 
     // ===== PRIORITY 1: Handle pending OC/DTM page actions (we're already on the page) =====
+    if (handleOCItemPurchase()) {
+      setTimeout(mainLoop, 3000);
+      return;
+    }
     if (handleOCPageAfterAccept()) {
       setTimeout(mainLoop, 3000);
       return;
@@ -10659,6 +10968,10 @@ async function mainLoop() {
           localStorage.removeItem(LS_PENDING_OC_URL);
           localStorage.setItem('tmnPendingOCHandle', 'true');
           localStorage.setItem('tmnPendingOCHandleTs', String(Date.now()));
+          // v17.65 - remember the invited role (pos= on the accept link) so the
+          // item auto-buy can tell weapon from explosive even if the dropdown id is unfamiliar
+          try { localStorage.setItem('tmnPendingOCRole', new URL(pendingOCUrl).searchParams.get('pos') || ''); }
+          catch { localStorage.setItem('tmnPendingOCRole', ''); }
           let roleInfo = '';
           try {
             const u = new URL(pendingOCUrl);
@@ -11280,7 +11593,7 @@ async function mainLoop() {
 
     // Show appropriate status based on tab status
     if (tabManager.isMasterTab) {
-      updateStatus("TMN TDS Auto v17.64 loaded - Master tab (single tab mode)");
+      updateStatus("TMN TDS Auto v17.66 loaded - Master tab (single tab mode)");
     } else {
       updateStatus("⏸ Secondary tab - close this tab or it will remain inactive");
     }

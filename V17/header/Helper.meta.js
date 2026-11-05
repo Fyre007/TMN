@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.64
+// @name         TMN TDS Auto v17.66
 // @namespace    http://tampermonkey.net/
-// @version      17.64
-// @description  v17.64 — DTM invite mail cleanup now deletes every DTM invitation in the inbox, not just the accepted one
+// @version      17.66
+// @description  v17.66 — OC item auto-buy: each step (go to store, buy, return) now waits a random 3-10s
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*
@@ -20,3 +20,4 @@
 // @updateURL    https://raw.githubusercontent.com/Fyre007/TMN/refs/heads/main/V17/header/Helper.meta.js
 // @downloadURL  https://raw.githubusercontent.com/Fyre007/TMN/refs/heads/main/V17/header/Helper.user.js
 // ==/UserScript==
+

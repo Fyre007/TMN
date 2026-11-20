@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.68
+// @name         TMN TDS Auto v17.69
 // @namespace    http://tampermonkey.net/
-// @version      17.68
-// @description  v17.68 — Proton Satria Neo R3 is now a changeable VIP car (no longer locked)
+// @version      17.69
+// @description  v17.69 — Staff mail/script-check alerts now watch Stipe, Snail and Geff (SQL removed)
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*

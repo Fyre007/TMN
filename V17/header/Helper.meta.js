@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.66
+// @name         TMN TDS Auto v17.68
 // @namespace    http://tampermonkey.net/
-// @version      17.66
-// @description  v17.66 — OC item auto-buy: each step (go to store, buy, return) now waits a random 3-10s
+// @version      17.68
+// @description  v17.68 — Proton Satria Neo R3 is now a changeable VIP car (no longer locked)
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*
@@ -20,4 +20,3 @@
 // @updateURL    https://raw.githubusercontent.com/Fyre007/TMN/refs/heads/main/V17/header/Helper.meta.js
 // @downloadURL  https://raw.githubusercontent.com/Fyre007/TMN/refs/heads/main/V17/header/Helper.user.js
 // ==/UserScript==
-

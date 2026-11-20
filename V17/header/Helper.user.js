@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.66
+// @name         TMN TDS Auto v17.68
 // @namespace    http://tampermonkey.net/
-// @version      17.66
-// @description  v17.66 — OC item auto-buy: each step (go to store, buy, return) now waits a random 3-10s
+// @version      17.68
+// @description  v17.68 — Proton Satria Neo R3 is now a changeable VIP car (no longer locked)
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*
@@ -22,6 +22,33 @@
 // ==/UserScript==
 
 /*
+TMN TDS Auto v17.68 — changelog
+
+CHANGED IN v17.68:
+- Proton Satria Neo R3 is no longer locked. It is still a VIP (OC) car by
+  default - Auto Garage keeps and repairs it - but its radio buttons in
+  Settings > Auto Garage > per-car categories are now enabled, so it can be
+  switched to Crush or Sell when needed. "Reset to defaults" puts it back to
+  OC. Its position in the list is unchanged: directly below the two locked
+  OC cars (Bentley Arnage, Audi RS6 Avant), above the Manual-only and
+  Crusher sections. A comment on its entry notes it is VIP-by-default but
+  unlocked, since the section header above it says "LOCKED".
+
+--- v17.67 changelog below ---
+
+TMN TDS Auto v17.67 — changelog
+
+NEW IN v17.67:
+- Added Proton Satria Neo R3 to the VIP (OC) car list, in the same form as
+  Bentley Arnage and Audi RS6 Avant: default category OC, locked. Auto Garage
+  keeps and repairs it instead of selling or crushing it, and it shows in
+  Settings > Auto Garage > per-car categories with the lock icon and
+  disabled radios like the other two. Settings builds that table from
+  KNOWN_CARS, so no separate UI change was needed. To make it changeable in
+  Settings instead, remove "locked: true" from its KNOWN_CARS entry.
+
+--- v17.66 changelog below ---
+
 TMN TDS Auto v17.66 — changelog
 
 CHANGED IN v17.66:
@@ -1472,7 +1499,7 @@ No changes intended to bypass site detection or restrictions; reliability/load c
         document.body.appendChild(loginOverlay);
       }
       console.log("[TMN AutoLogin]", message);
-      loginOverlay.textContent = `TMN TDS AutoLogin v17.66\n${message}`;
+      loginOverlay.textContent = `TMN TDS AutoLogin v17.68\n${message}`;
     }
 
     function clearTimers() {
@@ -6988,6 +7015,8 @@ let logoutNotificationSent = false;
     // OC / VIP cars (LOCKED — cannot be overridden)
     { name: 'Bentley Arnage',        defaultCategory: 'OC',    locked: true },
     { name: 'Audi RS6 Avant',        defaultCategory: 'OC',    locked: true },
+    // VIP by default but NOT locked - can be changed to Crush/Sell in Settings
+    { name: 'Proton Satria Neo R3',  defaultCategory: 'OC' },
     // Manual-only (LOCKED — never auto-processed; user handles via game UI)
     { name: 'Bugatti Chiron SS',     defaultCategory: 'Manual', locked: true, manual: true },
     // Crusher cars
@@ -8934,7 +8963,7 @@ let logoutNotificationSent = false;
     wrapper.innerHTML = `
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center" id="tmn-drag-handle" style="cursor: grab;">
-          <strong>TMN TDS Auto v17.66</strong>
+          <strong>TMN TDS Auto v17.68</strong>
           <div>
             <button id="tmn-lock-btn" class="btn btn-sm btn-outline-secondary me-1" title="Lock/Unlock position">ð</button>
             <button id="tmn-settings-btn" class="btn btn-sm btn-outline-secondary me-1" title="Settings">
@@ -11593,7 +11622,7 @@ async function mainLoop() {
 
     // Show appropriate status based on tab status
     if (tabManager.isMasterTab) {
-      updateStatus("TMN TDS Auto v17.66 loaded - Master tab (single tab mode)");
+      updateStatus("TMN TDS Auto v17.68 loaded - Master tab (single tab mode)");
     } else {
       updateStatus("⏸ Secondary tab - close this tab or it will remain inactive");
     }

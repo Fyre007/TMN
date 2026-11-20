@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TMN TDS Auto v17.68
+// @name         TMN TDS Auto v17.69
 // @namespace    http://tampermonkey.net/
-// @version      17.68
-// @description  v17.68 — Proton Satria Neo R3 is now a changeable VIP car (no longer locked)
+// @version      17.69
+// @description  v17.69 — Staff mail/script-check alerts now watch Stipe, Snail and Geff (SQL removed)
 // @author       You
 // @match        *://www.tmn2010.net/login.aspx*
 // @match        *://www.tmn2010.net/authenticated/*
@@ -22,6 +22,21 @@
 // ==/UserScript==
 
 /*
+TMN TDS Auto v17.69 — changelog
+
+CHANGED IN v17.69:
+- Staff alerts now watch three names: Stipe, Snail and Geff. SQL has been
+  removed. This covers the 5x Telegram alert for staff inbox messages (sender
+  match, or one of the names plus staff-style wording) and the staff script
+  check page alert ("<Name> Script Check", "<Name> what your favourite...",
+  "tell <Name> what"). Alert text, logs, Settings labels and the Telegram test
+  message were updated to say Stipe/Snail/Geff.
+- The inbox "Script test" title alert is unchanged - it still fires on any
+  sender.
+- Internal names such as notifySqlCheck were kept so saved settings carry over.
+
+--- v17.68 changelog below ---
+
 TMN TDS Auto v17.68 — changelog
 
 CHANGED IN v17.68:
@@ -1110,7 +1125,7 @@ Fixes carried over from v17.22:
 
 Features added:
 - Online Watch Alerts: watch up to 10 players and alert (browser notification, tab flash, sound, Telegram) when a watched name appears online.
-- Two staff-mail Telegram alerts: 5x on an inbox "Script test" title, and 5x on SQL/Stipe staff inbox messages. Mail gate widened so these scan even when general "New Messages" alerts are off.
+- Two staff-mail Telegram alerts: 5x on an inbox "Script test" title, and 5x on Stipe/Snail/Geff staff inbox messages. Mail gate widened so these scan even when general "New Messages" alerts are off.
 
 Garage:
 - Damage is now read via a robust row-scanner (getGarageRowInfo) instead of fixed column positions, BUT the crusher still only sends cars with damage > 0 and skips any car whose damage can't be parsed (crushing an undamaged car flags script usage).
@@ -1499,7 +1514,7 @@ No changes intended to bypass site detection or restrictions; reliability/load c
         document.body.appendChild(loginOverlay);
       }
       console.log("[TMN AutoLogin]", message);
-      loginOverlay.textContent = `TMN TDS AutoLogin v17.68\n${message}`;
+      loginOverlay.textContent = `TMN TDS AutoLogin v17.69\n${message}`;
     }
 
     function clearTimers() {
@@ -2571,13 +2586,13 @@ if (currentPath.includes("/authenticated/")) {
     sendRepeatedTelegramMessage(msg, 5, 1500, 'Script test inbox alert');
   }
 
-  function isSqlOrStipeSender(sender) {
-    return /^(sql|stipe)$/i.test(String(sender || '').trim());
+  function isStaffSender(sender) {
+    return /^(stipe|snail|geff)$/i.test(String(sender || '').trim());
   }
 
-  function hasSqlOrStipeStaffSignal(sender, subject, rowText, bodyText = '') {
+  function hasStaffSignal(sender, subject, rowText, bodyText = '') {
     const combined = `${sender || ''} ${subject || ''} ${rowText || ''} ${bodyText || ''}`;
-    return /\b(SQL|Stipe)\b/i.test(combined) &&
+    return /\b(Stipe|Snail|Geff)\b/i.test(combined) &&
            /(script\s*check|staff|admin|answer|question|reply|respond|favourite|favorite|important\s*message|mail|message)/i.test(combined);
   }
 
@@ -2587,14 +2602,14 @@ if (currentPath.includes("/authenticated/")) {
       '❗ <b>STAFF SCRIPT CHECK!</b>\n\n' +
       `Player: ${state.playerName || 'Unknown'}\n` +
       `Time: ${formatDateUK()}\n\n` +
-      '🛑 SQL/Stipe inbox message needs a response!\n' +
+      '🛑 Stipe/Snail/Geff inbox message needs a response!\n' +
       `From: <b>${escapeHtml(sender || 'Unknown')}</b>\n` +
       `Title: <b>${escapeHtml(subject || 'No subject')}</b>\n` +
       `Mail ID: ${escapeHtml(mailId || 'Unknown')}` +
       bodyPreview +
       '\n\n👉 Please open your TMN inbox and respond/check the message.';
 
-    sendRepeatedTelegramMessage(msg, 5, 1500, 'SQL/Stipe staff mail alert');
+    sendRepeatedTelegramMessage(msg, 5, 1500, 'Stipe/Snail/Geff staff mail alert');
   }
 
   function testTelegramConnection() {
@@ -2603,7 +2618,7 @@ if (currentPath.includes("/authenticated/")) {
       return;
     }
 
-    sendTelegramMessage('🎮 <b>TMN 2010 Automation</b>\n\nTelegram notifications are working!\n\nYou will receive alerts for:\n• Script checks (captcha)\n• New messages\n• Staff script checks (SQL / Stipe page checks)\n• SQL/Stipe inbox staff-check alerts (5x)\n• Inbox Script test alerts (5x)\n• Logout/timeout\n• Low health alerts');
+    sendTelegramMessage('🎮 <b>TMN 2010 Automation</b>\n\nTelegram notifications are working!\n\nYou will receive alerts for:\n• Script checks (captcha)\n• New messages\n• Staff script checks (Stipe / Snail / Geff page checks)\n• Stipe/Snail/Geff inbox staff-check alerts (5x)\n• Inbox Script test alerts (5x)\n• Logout/timeout\n• Low health alerts');
     alert('Test message sent! Check console (F12) and your Telegram.');
   }
 
@@ -2806,14 +2821,13 @@ if (currentPath.includes("/authenticated/")) {
     const importantMsgDiv = document.querySelector('div.NewGridTitle');
     const hasImportantMessage = importantMsgDiv && importantMsgDiv.textContent.includes('Important message');
 
-    // Method 2: Check page content for SQL/Stipe script check indicators
+    // Method 2: Check page content for Stipe/Snail/Geff script check indicators
     const pageText = document.body.textContent;
-    const hasSqlCheck = pageText.includes('SQL Script Check') ||
-                        pageText.includes('SQL what your favourite') ||
-                        pageText.includes('tell SQL what') ||
-                        pageText.includes('Stipe Script Check') ||
-                        pageText.includes('Stipe what your favourite') ||
-                        pageText.includes('tell Stipe what');
+    const staffNames = ['Stipe', 'Snail', 'Geff'];
+    const hasSqlCheck = staffNames.some(n =>
+                          pageText.includes(`${n} Script Check`) ||
+                          pageText.includes(`${n} what your favourite`) ||
+                          pageText.includes(`tell ${n} what`));
 
     if ((hasImportantMessage || hasSqlCheck) && !sqlCheckNotificationSent) {
       console.log('[Telegram] Staff Script Check detected! Sending notification...');
@@ -2823,7 +2837,7 @@ if (currentPath.includes("/authenticated/")) {
       const paragraphs = document.querySelectorAll('p, div');
       for (let p of paragraphs) {
         const text = p.textContent;
-        if ((text.includes('SQL') || text.includes('Stipe')) && text.includes('?')) {
+        if ((text.includes('Stipe') || text.includes('Snail') || text.includes('Geff')) && text.includes('?')) {
           question = text.trim();
           break;
         }
@@ -4762,13 +4776,13 @@ let logoutNotificationSent = false;
           }
         }
 
-        // SQL/Stipe staff mail alert — catches staff checks delivered as normal inbox messages.
+        // Stipe/Snail/Geff staff mail alert — catches staff checks delivered as normal inbox messages.
         // Separate high-water mark prevents repeats and works even when general new-message alerts are off.
         if (telegramConfig.enabled && telegramConfig.notifyStaffMailCheck) {
           const lastStaffMailId = GM_getValue('lastStaffScriptMailId', null);
           const numericMailId = parseInt(mailId, 10) || 0;
 
-          // First run: baseline the mailbox so old SQL/Stipe messages do not spam Telegram after update/install.
+          // First run: baseline the mailbox so old Stipe/Snail/Geff messages do not spam Telegram after update/install.
           if (lastStaffMailId === null) {
             let maxId = 0;
             for (const row of rows) {
@@ -4786,14 +4800,14 @@ let logoutNotificationSent = false;
             const mailTs = parseTMNDateFromText(rowText);
             if (isOlderThanMs(mailTs, INVITE_STALE_MS)) {
               GM_setValue('lastStaffScriptMailId', numericMailId);
-              console.log(`[TMN][MAIL] SQL/Stipe staff mail skipped — 15min+ old id=${mailId}`);
-            } else if (isSqlOrStipeSender(sender) || hasSqlOrStipeStaffSignal(sender, subject, rowText)) {
+              console.log(`[TMN][MAIL] Stipe/Snail/Geff staff mail skipped — 15min+ old id=${mailId}`);
+            } else if (isStaffSender(sender) || hasStaffSignal(sender, subject, rowText)) {
               GM_setValue('lastStaffScriptMailId', numericMailId);
               let mailContent = '';
               try { mailContent = await fetchMailContentById(href) || ''; } catch (e) { mailContent = ''; }
 
-              if (isSqlOrStipeSender(sender) || hasSqlOrStipeStaffSignal(sender, subject, rowText, mailContent)) {
-                console.log(`[TMN][MAIL] SQL/Stipe staff mail detected — alerting 5x id=${mailId}`);
+              if (isStaffSender(sender) || hasStaffSignal(sender, subject, rowText, mailContent)) {
+                console.log(`[TMN][MAIL] Stipe/Snail/Geff staff mail detected — alerting 5x id=${mailId}`);
                 sendStaffMailCheckAlert(mailId, sender, subject, mailContent);
                 continue;
               }
@@ -8963,7 +8977,7 @@ let logoutNotificationSent = false;
     wrapper.innerHTML = `
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center" id="tmn-drag-handle" style="cursor: grab;">
-          <strong>TMN TDS Auto v17.68</strong>
+          <strong>TMN TDS Auto v17.69</strong>
           <div>
             <button id="tmn-lock-btn" class="btn btn-sm btn-outline-secondary me-1" title="Lock/Unlock position">ð</button>
             <button id="tmn-settings-btn" class="btn btn-sm btn-outline-secondary me-1" title="Settings">
@@ -9354,11 +9368,11 @@ let logoutNotificationSent = false;
                 </div>
                 <div class="form-check mb-2">
                   <input class="form-check-input" type="checkbox" id="tmn-notify-staff-mail">
-                  <label class="form-check-label" for="tmn-notify-staff-mail">Alert 5x on SQL/Stipe inbox messages</label>
+                  <label class="form-check-label" for="tmn-notify-staff-mail">Alert 5x on Stipe/Snail/Geff inbox messages</label>
                 </div>
                 <div class="form-check mb-2">
                   <input class="form-check-input" type="checkbox" id="tmn-notify-sql">
-                  <label class="form-check-label" for="tmn-notify-sql">Notify on SQL/Stipe Script Check page</label>
+                  <label class="form-check-label" for="tmn-notify-sql">Notify on Stipe/Snail/Geff Script Check page</label>
                 </div>
                 <div class="form-check mb-2">
                   <input class="form-check-input" type="checkbox" id="tmn-notify-logout">
@@ -11032,7 +11046,7 @@ async function mainLoop() {
 
     // ===== PRIORITY 3: Check mail for new invites =====
     // Runs every 60s normally, or IMMEDIATELY when on the mailbox page.
-    // Gate widened so Script test and SQL/Stipe staff-mail alerts still scan when
+    // Gate widened so Script test and Stipe/Snail/Geff staff-mail alerts still scan when
     // general "New Messages" notifications are disabled.
     // v17.38 - added state.autoTravelAfterDTM here too. The v17.34 changelog
     // claimed this outer gate was widened to also run for an Auto-Travel-only
@@ -11622,7 +11636,7 @@ async function mainLoop() {
 
     // Show appropriate status based on tab status
     if (tabManager.isMasterTab) {
-      updateStatus("TMN TDS Auto v17.68 loaded - Master tab (single tab mode)");
+      updateStatus("TMN TDS Auto v17.69 loaded - Master tab (single tab mode)");
     } else {
       updateStatus("⏸ Secondary tab - close this tab or it will remain inactive");
     }
